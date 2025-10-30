@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 class MilvusManager:
     """Менеджер для работы с Milvus"""
     
+    def __enter__(self):
+        """Context manager entry"""
+        self.connect()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        self.disconnect()
+        return False
+    
     def __init__(
         self,
         host: str = "localhost",
@@ -144,6 +154,12 @@ class MilvusManager:
             True если загрузка успешна
         """
         try:
+            # Проверка подключения
+            if not self._is_connected():
+                logger.warning("Нет подключения к Milvus, попытка переподключения")
+                if not self.connect():
+                    return False
+            
             if self.collection is None:
                 self.collection = Collection(self.collection_name)
             
@@ -162,6 +178,12 @@ class MilvusManager:
             Словарь со статистикой
         """
         try:
+            # Проверка подключения
+            if not self._is_connected():
+                logger.warning("Нет подключения к Milvus, попытка переподключения")
+                if not self.connect():
+                    return {}
+            
             if self.collection is None:
                 self.collection = Collection(self.collection_name)
             
@@ -175,10 +197,28 @@ class MilvusManager:
             logger.error(f"Ошибка получения статистики: {e}")
             return {}
     
-    def disconnect(self):
-        """Отключение от Milvus"""
+    def _is_connected(self) -> bool:
+        """
+        Проверка подключения к Milvus
+        
+        Returns:
+            True если подключение активно
+        """
         try:
-            connections.disconnect(alias="default")
-            logger.info("Отключено от Milvus")
+            return connections.has_connection("default")
+        except Exception:
+            return False
+    
+    def disconnect(self) -> None:
+        """
+        Отключение от Milvus
+        
+        Returns:
+            None
+        """
+        try:
+            if self._is_connected():
+                connections.disconnect(alias="default")
+                logger.info("Отключено от Milvus")
         except Exception as e:
             logger.error(f"Ошибка отключения от Milvus: {e}")

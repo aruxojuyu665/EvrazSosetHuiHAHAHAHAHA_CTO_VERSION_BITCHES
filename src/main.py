@@ -11,15 +11,20 @@ from src.rag import GOSTRAGSystem
 from src.config import config
 
 
-def setup_logging(level: str = "INFO"):
-    """Настройка логирования"""
+def setup_logging(level: str = "INFO") -> None:
+    """
+    Настройка логирования
+    
+    Args:
+        level: Уровень логирования
+    """
     logging.basicConfig(
         level=getattr(logging, level.upper()),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
 
-def index_documents(rag_system: GOSTRAGSystem, document_path: str, create_new: bool = False):
+def index_documents(rag_system: GOSTRAGSystem, document_path: str, create_new: bool = False) -> None:
     """
     Индексирование документов
     
@@ -29,6 +34,12 @@ def index_documents(rag_system: GOSTRAGSystem, document_path: str, create_new: b
         create_new: Создать новый индекс
     """
     logger = logging.getLogger(__name__)
+    
+    # Валидация пути
+    path = Path(document_path)
+    if not path.exists():
+        logger.error(f"Путь не существует: {document_path}")
+        raise FileNotFoundError(f"Путь не найден: {document_path}")
     
     logger.info(f"Индексирование документов из: {document_path}")
     
@@ -44,7 +55,7 @@ def index_documents(rag_system: GOSTRAGSystem, document_path: str, create_new: b
     logger.info("Индексирование завершено")
 
 
-def query_system(rag_system: GOSTRAGSystem, question: str, output_file: str = None):
+def query_system(rag_system: GOSTRAGSystem, question: str, output_file: str = None) -> None:
     """
     Выполнение запроса к системе
     
@@ -54,6 +65,11 @@ def query_system(rag_system: GOSTRAGSystem, question: str, output_file: str = No
         output_file: Файл для сохранения результата
     """
     logger = logging.getLogger(__name__)
+    
+    # Валидация вопроса
+    if not question or not question.strip():
+        logger.error("Вопрос не может быть пустым")
+        raise ValueError("Вопрос не может быть пустым")
     
     logger.info(f"Выполнение запроса: {question}")
     
@@ -88,7 +104,7 @@ def query_system(rag_system: GOSTRAGSystem, question: str, output_file: str = No
         logger.info(f"Результат сохранен в: {output_file}")
 
 
-def extract_class_info(rag_system: GOSTRAGSystem, class_name: str, output_file: str = None):
+def extract_class_info(rag_system: GOSTRAGSystem, class_name: str, output_file: str = None) -> None:
     """
     Извлечение информации о классе прочности
     
@@ -98,6 +114,11 @@ def extract_class_info(rag_system: GOSTRAGSystem, class_name: str, output_file: 
         output_file: Файл для сохранения результата
     """
     logger = logging.getLogger(__name__)
+    
+    # Валидация названия класса
+    if not class_name or not class_name.strip():
+        logger.error("Название класса не может быть пустым")
+        raise ValueError("Название класса не может быть пустым")
     
     logger.info(f"Извлечение информации о классе прочности: {class_name}")
     
@@ -129,8 +150,13 @@ def extract_class_info(rag_system: GOSTRAGSystem, class_name: str, output_file: 
     logger.info(f"Результат сохранен в: {output_path}")
 
 
-def show_stats(rag_system: GOSTRAGSystem):
-    """Показать статистику системы"""
+def show_stats(rag_system: GOSTRAGSystem) -> None:
+    """
+    Показать статистику системы
+    
+    Args:
+        rag_system: RAG система
+    """
     rag_system.initialize_milvus(create_new=False)
     stats = rag_system.get_stats()
     

@@ -22,6 +22,7 @@ from llama_index.core.response_synthesizers import get_response_synthesizer
 
 from src.vector_store import MilvusManager
 from src.config import config
+from src.utils import retry_on_error
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,9 @@ class GOSTRAGSystem:
                 api_base=config.openrouter.base_url,
                 model=config.openrouter.model,
                 temperature=config.openrouter.temperature,
-                max_tokens=config.openrouter.max_tokens
+                max_tokens=config.openrouter.max_tokens,
+                timeout=60.0,  # 60 секунд timeout
+                max_retries=2
             )
             
             # Установка глобальных настроек LlamaIndex
@@ -84,7 +87,9 @@ class GOSTRAGSystem:
         try:
             self.embed_model = OpenAIEmbedding(
                 api_key=self.embedding_api_key,
-                model=config.embedding.model
+                model=config.embedding.model,
+                timeout=30.0,  # 30 секунд timeout
+                max_retries=2
             )
             
             # Установка глобальных настроек
@@ -129,6 +134,10 @@ class GOSTRAGSystem:
             
         Returns:
             Список загруженных документов
+            
+        Note:
+            Для очень больших файлов (>100MB) рекомендуется использовать
+            streaming или batch обработку для оптимизации памяти.
         """
         try:
             path = Path(document_path)
@@ -255,6 +264,7 @@ class GOSTRAGSystem:
             logger.error(f"Ошибка настройки query engine: {e}")
             raise
     
+    @retry_on_error(max_retries=3, delay=2.0, backoff=2.0)
     def query(self, question: str) -> Dict:
         """
         Выполнение запроса к RAG системе
