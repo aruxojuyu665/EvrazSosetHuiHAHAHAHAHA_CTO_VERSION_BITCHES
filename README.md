@@ -255,3 +255,38 @@ pylint src/
 ## Контакты
 
 При возникновении вопросов обращайтесь к команде разработки.
+
+## Документация
+
+Полная документация проекта:
+
+- **[Быстрый старт](QUICKSTART.md)** - пошаговое руководство по запуску системы
+- **[Архитектура системы](docs/SYSTEM_ARCHITECTURE.md)** - детальное описание логики работы и компонентов
+- **[Требования RunPod](docs/RUNPOD_REQUIREMENTS.md)** - системные требования и оценка ресурсов
+- **[Развертывание на RunPod](docs/RUNPOD_DEPLOYMENT.md)** - полное руководство по развертыванию
+- **[Техническое задание](docs/technical_specification.md)** - исходное ТЗ проекта
+- **[Транскрипт встречи](docs/meeting_transcript.md)** - обсуждение требований
+- **[Структура проекта](STRUCTURE.md)** - организация файлов и директорий
+- **[История изменений](CHANGELOG.md)** - версии и обновления
+
+## Быстрый старт
+
+```bash
+# 1. Клонировать и настроить
+git clone https://github.com/aruxojuyu665/EvrazSosetHuiHAHAHAHAHA_CTO_VERSION_BITCHES.git
+cd EvrazSosetHuiHAHAHAHAHA_CTO_VERSION_BITCHES
+git checkout RAG-Milvus-Manus-Edition
+cp .env.example .env
+# Отредактировать .env с API ключами
+
+# 2. Запустить систему
+docker-compose up -d
+
+# 3. Индексировать документы
+docker-compose exec rag-app python -m src.main index --input /app/data/raw --create-new
+
+# 4. Извлечь информацию
+docker-compose exec rag-app python -m src.main extract --class-name C235
+```
+
+Подробнее см. [QUICKSTART.md](QUICKSTART.md)
