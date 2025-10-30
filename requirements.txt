@@ -19,7 +19,6 @@ langchain-openai==0.1.7
 
 # Vector Database
 pymilvus==2.3.7
-milvus==2.3.7
 
 # OpenRouter API (OpenAI compatible)
 openai==1.35.3

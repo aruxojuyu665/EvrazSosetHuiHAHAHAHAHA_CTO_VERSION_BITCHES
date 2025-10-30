@@ -40,16 +40,18 @@ def retry_on_error(
                 except exceptions as e:
                     last_exception = e
                     
+                    func_name = getattr(func, '__name__', 'unknown_function')
+                    
                     if attempt < max_retries - 1:
                         logger.warning(
-                            f"Попытка {attempt + 1}/{max_retries} не удалась для {func.__name__}: {e}. "
+                            f"Попытка {attempt + 1}/{max_retries} не удалась для {func_name}: {e}. "
                             f"Повтор через {current_delay:.1f}с"
                         )
                         time.sleep(current_delay)
                         current_delay *= backoff
                     else:
                         logger.error(
-                            f"Все {max_retries} попытки не удались для {func.__name__}: {e}"
+                            f"Все {max_retries} попытки не удались для {func_name}: {e}"
                         )
             
             # Если все попытки не удались, выбрасываем последнее исключение
