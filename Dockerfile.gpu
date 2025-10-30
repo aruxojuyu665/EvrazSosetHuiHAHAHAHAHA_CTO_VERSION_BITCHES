@@ -1,0 +1,68 @@
+# Dockerfile для развертывания RAG системы на RunPod с GPU поддержкой
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+# Установка Python 3.11
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3.11-distutils \
+    python3-pip \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Установка pip для Python 3.11
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+
+# Создание символических ссылок
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python && \
+    ln -sf /usr/bin/python3.11 /usr/bin/python3
+
+# Установка рабочей директории
+WORKDIR /app
+
+# Копирование requirements.txt
+COPY requirements.txt .
+
+# Установка PyTorch с CUDA поддержкой
+RUN pip install --no-cache-dir torch==2.1.2 --index-url https://download.pytorch.org/whl/cu121
+
+# Установка остальных Python зависимостей
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Предзагрузка модели эмбеддингов (опционально, для ускорения первого запуска)
+RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('intfloat/multilingual-e5-large')"
+
+# Копирование исходного кода
+COPY src/ ./src/
+COPY data/ ./data/
+COPY config/ ./config/
+
+# Копирование .env файла (если есть)
+COPY .env* ./
+
+# Создание директорий для данных
+RUN mkdir -p /app/data/raw /app/data/processed /app/output /app/logs
+
+# Переменные окружения по умолчанию
+ENV PYTHONUNBUFFERED=1
+ENV MILVUS_HOST=localhost
+ENV MILVUS_PORT=19530
+ENV EMBEDDING_TYPE=local
+ENV LOCAL_EMBEDDING_MODEL=intfloat/multilingual-e5-large
+ENV LOCAL_EMBEDDING_DEVICE=cuda
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Expose порт для API (если будет использоваться)
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())" || exit 1
+
+# Команда запуска по умолчанию
+CMD ["python", "-m", "src.main", "--help"]

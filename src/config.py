@@ -40,6 +40,15 @@ class OpenRouterConfig(BaseModel):
 
 class EmbeddingConfig(BaseModel):
     """Конфигурация для embedding модели"""
+    # Тип эмбеддингов: 'local' или 'openai'
+    embedding_type: str = Field(default_factory=lambda: os.getenv("EMBEDDING_TYPE", "local"))
+    
+    # Настройки для локальных эмбеддингов
+    local_model: str = Field(default_factory=lambda: os.getenv("LOCAL_EMBEDDING_MODEL", "intfloat/multilingual-e5-large"))
+    local_device: str = Field(default_factory=lambda: os.getenv("LOCAL_EMBEDDING_DEVICE", "cuda"))
+    local_batch_size: int = Field(default_factory=lambda: _safe_int("LOCAL_EMBEDDING_BATCH_SIZE", 32))
+    
+    # Настройки для OpenAI эмбеддингов
     model: str = Field(default_factory=lambda: os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"))
     api_key: str = Field(default_factory=lambda: os.getenv("EMBEDDING_API_KEY", ""))
 

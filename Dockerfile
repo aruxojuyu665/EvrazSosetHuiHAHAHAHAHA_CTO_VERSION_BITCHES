@@ -1,4 +1,5 @@
-# Dockerfile для развертывания RAG системы на RunPod
+# Dockerfile для развертывания RAG системы на RunPod (CPU версия)
+# Для GPU используйте Dockerfile.gpu
 FROM python:3.11-slim
 
 # Установка системных зависимостей
@@ -14,8 +15,14 @@ WORKDIR /app
 # Копирование requirements.txt
 COPY requirements.txt .
 
-# Установка Python зависимостей
+# Установка PyTorch CPU версии
+RUN pip install --no-cache-dir torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
+
+# Установка остальных Python зависимостей
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Предзагрузка модели эмбеддингов (опционально)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('intfloat/multilingual-e5-large')" || true
 
 # Копирование исходного кода
 COPY src/ ./src/
@@ -32,6 +39,9 @@ RUN mkdir -p /app/data/raw /app/data/processed
 ENV PYTHONUNBUFFERED=1
 ENV MILVUS_HOST=localhost
 ENV MILVUS_PORT=19530
+ENV EMBEDDING_TYPE=local
+ENV LOCAL_EMBEDDING_MODEL=intfloat/multilingual-e5-large
+ENV LOCAL_EMBEDDING_DEVICE=cpu
 
 # Expose порт для API (если будет использоваться)
 EXPOSE 8000

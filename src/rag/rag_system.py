@@ -85,17 +85,40 @@ class GOSTRAGSystem:
     def _setup_embeddings(self):
         """Настройка embedding модели"""
         try:
-            self.embed_model = OpenAIEmbedding(
-                api_key=self.embedding_api_key,
-                model=config.embedding.model,
-                timeout=30.0,  # 30 секунд timeout
-                max_retries=2
-            )
+            embedding_type = config.embedding.embedding_type.lower()
+            
+            if embedding_type == "local":
+                # Использование локальной модели
+                from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+                
+                logger.info(f"Инициализация локальной embedding модели: {config.embedding.local_model}")
+                logger.info(f"Устройство: {config.embedding.local_device}")
+                
+                self.embed_model = HuggingFaceEmbedding(
+                    model_name=config.embedding.local_model,
+                    device=config.embedding.local_device,
+                    embed_batch_size=config.embedding.local_batch_size
+                )
+                
+                logger.info(f"Локальная embedding модель загружена: {config.embedding.local_model}")
+                
+            elif embedding_type == "openai":
+                # Использование OpenAI API
+                self.embed_model = OpenAIEmbedding(
+                    api_key=self.embedding_api_key,
+                    model=config.embedding.model,
+                    timeout=30.0,
+                    max_retries=2
+                )
+                
+                logger.info(f"OpenAI embedding модель настроена: {config.embedding.model}")
+                
+            else:
+                raise ValueError(f"Неизвестный тип эмбеддингов: {embedding_type}. Используйте 'local' или 'openai'")
             
             # Установка глобальных настроек
             Settings.embed_model = self.embed_model
             
-            logger.info(f"Embedding модель настроена: {config.embedding.model}")
         except Exception as e:
             logger.error(f"Ошибка настройки embeddings: {e}")
             raise
