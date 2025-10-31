@@ -201,3 +201,26 @@
 - Пример Jupyter notebook для исследовательского анализа
 - README с описанием проекта
 - requirements.txt с зависимостями
+
+## [0.3.1] - 2025-10-31
+
+### Added
+- Comprehensive technical stack documentation (`docs/tech_stack.md`)
+- Milvus Lite vs Standalone comparison (`docs/milvus_comparison.md`)
+- RunPod deployment complete report (`docs/runpod_deployment_complete.md`)
+- Deployment summary with problem analysis (`docs/deployment_summary.md`)
+
+### Changed
+- Updated deployment strategy to Milvus Lite (Docker-in-Docker issues on RunPod)
+- Improved documentation structure
+
+### Infrastructure
+- Docker 28.5.1 installed on RunPod
+- Python 3.11.14 environment configured
+- All dependencies installed (~3.5 GB)
+- GPU acceleration verified (RTX 3090)
+
+### Notes
+- Milvus Standalone requires Docker-in-Docker (not available on RunPod)
+- Milvus Lite recommended for current deployment
+- Code adaptation required for Milvus Lite integration
