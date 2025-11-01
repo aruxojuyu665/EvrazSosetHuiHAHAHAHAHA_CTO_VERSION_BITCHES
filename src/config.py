@@ -52,6 +52,7 @@ class EmbeddingConfig(BaseModel):
     # Настройки для OpenAI эмбеддингов
     model: str = Field(default_factory=lambda: os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"))
     api_key: str = Field(default_factory=lambda: os.getenv("EMBEDDING_API_KEY", ""))
+    base_url: Optional[str] = Field(default_factory=lambda: os.getenv("EMBEDDING_BASE_URL", None))
 
 
 class MilvusConfig(BaseModel):
