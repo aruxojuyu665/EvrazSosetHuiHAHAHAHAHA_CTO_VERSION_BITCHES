@@ -122,9 +122,10 @@ class GOSTRAGSystem:
                 logger.info(f"Локальная embedding модель загружена: {config.embedding.local_model}")
                 
             elif embedding_type == "openai":
-                # Использование OpenAI API
+                # Использование OpenAI API (или OpenRouter)
                 self.embed_model = OpenAIEmbedding(
                     api_key=self.embedding_api_key,
+                    api_base=config.embedding.base_url if hasattr(config.embedding, 'base_url') else None,
                     model=config.embedding.model,
                     timeout=30.0,
                     max_retries=2
