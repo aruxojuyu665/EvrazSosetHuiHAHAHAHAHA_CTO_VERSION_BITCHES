@@ -219,6 +219,21 @@ def main():
     # Команда статистики
     subparsers.add_parser('stats', help='Показать статистику системы')
     
+    # Команда API сервера
+    api_parser = subparsers.add_parser('api', help='Запустить FastAPI сервер')
+    api_parser.add_argument(
+        '--host',
+        type=str,
+        default='0.0.0.0',
+        help='Хост для сервера (по умолчанию: 0.0.0.0)'
+    )
+    api_parser.add_argument(
+        '--port',
+        type=int,
+        default=8000,
+        help='Порт для сервера (по умолчанию: 8000)'
+    )
+    
     # Общие параметры
     parser.add_argument(
         '--log-level',
@@ -254,6 +269,16 @@ def main():
         extract_class_info(rag_system, args.class_name, args.output)
     elif args.command == 'stats':
         show_stats(rag_system)
+    elif args.command == 'api':
+        logger.info(f"Запуск FastAPI сервера на {args.host}:{args.port}")
+        import uvicorn
+        uvicorn.run(
+            "src.api_server:app",
+            host=args.host,
+            port=args.port,
+            reload=False,
+            log_level=args.log_level.lower()
+        )
     else:
         parser.print_help()
 
