@@ -61,7 +61,8 @@ class MilvusConfig(BaseModel):
     Обновлено для использования uri вместо host/port
     """
     # Новый параметр для Milvus Lite
-    uri: str = Field(default_factory=lambda: os.getenv("MILVUS_URI", "./milvus_lite.db"))
+    # Используем APP_MILVUS_URI чтобы избежать конфликта с pymilvus
+    uri: str = Field(default_factory=lambda: os.getenv("APP_MILVUS_URI", "./milvus_lite.db"))
     
     # Старые параметры для обратной совместимости (deprecated)
     host: Optional[str] = Field(default_factory=lambda: os.getenv("MILVUS_HOST", None))

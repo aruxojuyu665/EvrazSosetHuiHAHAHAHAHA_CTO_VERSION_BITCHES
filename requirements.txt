@@ -21,11 +21,10 @@ langchain-openai==0.1.7
 # Local Embeddings
 sentence-transformers==2.2.2
 torch==2.1.2
-transformers==4.36.2
+transformers>=4.37.0
 
-# Vector Database (Milvus Lite)
-pymilvus==2.6.2
-milvus-lite==2.3.5
+# Vector Database (Milvus Lite included in pymilvus 2.4.2+)
+pymilvus[milvus_lite]>=2.4.2
 
 # OpenRouter API (OpenAI compatible)
 openai==1.35.3
@@ -36,7 +35,7 @@ lxml==4.9.3
 tiktoken==0.7.0
 
 # Utilities
-python-dotenv==1.0.0
+python-dotenv>=1.0.1
 tqdm==4.66.1
 pyyaml==6.0.1
 

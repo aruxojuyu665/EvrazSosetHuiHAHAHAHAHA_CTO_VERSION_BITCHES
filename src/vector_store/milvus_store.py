@@ -90,11 +90,14 @@ class MilvusManager:
                     return True
             
             # Создание коллекции с автоматической схемой
+            # auto_id=False для совместимости с LlamaIndex (использует строковые ID)
             self.client.create_collection(
                 collection_name=self.collection_name,
                 dimension=self.dim,
                 metric_type=self.metric_type,
-                auto_id=True
+                auto_id=False,
+                id_type="string",
+                max_length=65535
             )
             
             logger.info(f"Коллекция {self.collection_name} создана успешно")
@@ -105,20 +108,24 @@ class MilvusManager:
             logger.error(f"Ошибка создания коллекции: {e}")
             return False
     
-    def get_vector_store(self) -> MilvusVectorStore:
+    def get_vector_store(self, overwrite: bool = False) -> MilvusVectorStore:
         """
         Получение векторного хранилища для LlamaIndex
+        
+        Args:
+            overwrite: Перезаписать существующую коллекцию
         
         Returns:
             MilvusVectorStore объект
         """
         try:
             # LlamaIndex MilvusVectorStore поддерживает Milvus Lite через uri параметр
+            # Позволяем MilvusVectorStore самому управлять схемой коллекции
             vector_store = MilvusVectorStore(
                 uri=self.uri,
                 collection_name=self.collection_name,
                 dim=self.dim,
-                overwrite=False
+                overwrite=overwrite
             )
             logger.info(f"Векторное хранилище создано для коллекции {self.collection_name}")
             return vector_store

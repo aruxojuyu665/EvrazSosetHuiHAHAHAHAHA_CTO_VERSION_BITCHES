@@ -62,15 +62,36 @@ class GOSTRAGSystem:
         """Настройка LLM через OpenRouter"""
         try:
             # OpenRouter совместим с OpenAI API
+            # Используем additional_kwargs для передачи реальной модели
             self.llm = OpenAI(
                 api_key=self.openrouter_api_key,
                 api_base=config.openrouter.base_url,
                 model=config.openrouter.model,
                 temperature=config.openrouter.temperature,
                 max_tokens=config.openrouter.max_tokens,
-                timeout=60.0,  # 60 секунд timeout
-                max_retries=2
+                timeout=60.0,
+                max_retries=2,
+                default_headers={
+                    "HTTP-Referer": "https://github.com/gost-rag-project",
+                    "X-Title": "GOST RAG System"
+                },
+                logprobs=False,
+                is_chat_model=True,
+                is_function_calling_model=False
             )
+            
+            # Патчим metadata чтобы избежать проверки модели
+            from llama_index.core.base.llms.types import LLMMetadata
+            custom_metadata = LLMMetadata(
+                context_window=200000,
+                num_output=config.openrouter.max_tokens,
+                is_chat_model=True,
+                is_function_calling_model=False,
+                model_name=config.openrouter.model
+            )
+            
+            # Переопределяем metadata как property
+            type(self.llm).metadata = property(lambda self: custom_metadata)
             
             # Установка глобальных настроек LlamaIndex
             Settings.llm = self.llm
@@ -141,8 +162,9 @@ class GOSTRAGSystem:
             if not self.milvus_manager.connect():
                 raise ConnectionError("Не удалось подключиться к Milvus Lite")
             
-            if not self.milvus_manager.create_collection(overwrite=create_new):
-                raise RuntimeError("Не удалось создать коллекцию")
+            # Не создаем коллекцию вручную - позволяем LlamaIndex MilvusVectorStore управлять схемой
+            # Сохраняем create_new для передачи в get_vector_store
+            self._create_new = create_new
             
             logger.info("Milvus Lite инициализирован успешно")
         except Exception as e:
@@ -202,8 +224,9 @@ class GOSTRAGSystem:
             
             Settings.text_splitter = text_splitter
             
-            # Получение векторного хранилища
-            vector_store = self.milvus_manager.get_vector_store()
+            # Получение векторного хранилища с передачей overwrite
+            overwrite = getattr(self, '_create_new', False)
+            vector_store = self.milvus_manager.get_vector_store(overwrite=overwrite)
             storage_context = StorageContext.from_defaults(
                 vector_store=vector_store
             )
@@ -272,20 +295,16 @@ class GOSTRAGSystem:
             
             logger.info(f"Настройка query engine с top_k={top_k}")
             
-            # Создание retriever
-            retriever = VectorIndexRetriever(
-                index=self.index,
-                similarity_top_k=top_k
+            # Создаем response_synthesizer вручную с кастомным LLM
+            from llama_index.core.response_synthesizers import CompactAndRefine
+            response_synthesizer = CompactAndRefine(
+                llm=self.llm,
+                streaming=False
             )
             
-            # Создание response synthesizer
-            response_synthesizer = get_response_synthesizer(
-                response_mode="compact"
-            )
-            
-            # Создание query engine
-            self.query_engine = RetrieverQueryEngine(
-                retriever=retriever,
+            # Используем as_query_engine() с явным response_synthesizer
+            self.query_engine = self.index.as_query_engine(
+                similarity_top_k=top_k,
                 response_synthesizer=response_synthesizer
             )
             
