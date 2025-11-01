@@ -1,5 +1,6 @@
 """
-RAG система на основе LlamaIndex с интеграцией OpenRouter и Milvus
+RAG система на основе LlamaIndex с интеграцией OpenRouter и Milvus Lite
+Обновлено для использования Milvus Lite вместо Milvus Standalone
 """
 
 import logging
@@ -34,23 +35,20 @@ class GOSTRAGSystem:
         self,
         openrouter_api_key: Optional[str] = None,
         embedding_api_key: Optional[str] = None,
-        milvus_host: Optional[str] = None,
-        milvus_port: Optional[int] = None
+        milvus_uri: Optional[str] = None
     ):
         """
         Инициализация RAG системы
         
         Args:
             openrouter_api_key: API ключ OpenRouter
-            embedding_api_key: API ключ для embeddings
-            milvus_host: Хост Milvus
-            milvus_port: Порт Milvus
+            embedding_api_key: API ключ для embeddings (только для типа 'openai')
+            milvus_uri: URI для Milvus Lite (путь к файлу БД)
         """
         # Использование конфигурации
         self.openrouter_api_key = openrouter_api_key or config.openrouter.api_key
         self.embedding_api_key = embedding_api_key or config.embedding.api_key
-        self.milvus_host = milvus_host or config.milvus.host
-        self.milvus_port = milvus_port or config.milvus.port
+        self.milvus_uri = milvus_uri or config.milvus.uri
         
         # Инициализация компонентов
         self.milvus_manager: Optional[MilvusManager] = None
@@ -125,27 +123,30 @@ class GOSTRAGSystem:
     
     def initialize_milvus(self, create_new: bool = False):
         """
-        Инициализация Milvus
+        Инициализация Milvus Lite
         
         Args:
             create_new: Создать новую коллекцию (удалит существующую)
         """
         try:
+            logger.info(f"Инициализация Milvus Lite с URI: {self.milvus_uri}")
+            
             self.milvus_manager = MilvusManager(
-                host=self.milvus_host,
-                port=self.milvus_port,
-                collection_name=config.milvus.collection_name
+                uri=self.milvus_uri,
+                collection_name=config.milvus.collection_name,
+                dim=config.milvus.dimension,
+                metric_type=config.milvus.metric_type
             )
             
             if not self.milvus_manager.connect():
-                raise ConnectionError("Не удалось подключиться к Milvus")
+                raise ConnectionError("Не удалось подключиться к Milvus Lite")
             
             if not self.milvus_manager.create_collection(overwrite=create_new):
                 raise RuntimeError("Не удалось создать коллекцию")
             
-            logger.info("Milvus инициализирован успешно")
+            logger.info("Milvus Lite инициализирован успешно")
         except Exception as e:
-            logger.error(f"Ошибка инициализации Milvus: {e}")
+            logger.error(f"Ошибка инициализации Milvus Lite: {e}")
             raise
     
     def load_documents(self, document_path: str) -> List:
@@ -207,6 +208,9 @@ class GOSTRAGSystem:
                 vector_store=vector_store
             )
             
+            logger.info("Создание индекса из документов...")
+            logger.info(f"Chunk size: {config.rag.chunk_size}, overlap: {config.rag.chunk_overlap}")
+            
             # Создание индекса
             self.index = VectorStoreIndex.from_documents(
                 documents,
@@ -221,8 +225,17 @@ class GOSTRAGSystem:
             raise
     
     def load_index(self):
-        """Загрузка существующего индекса из Milvus"""
+        """Загрузка существующего индекса из Milvus Lite"""
         try:
+            logger.info("Загрузка существующего индекса из Milvus Lite...")
+            
+            # Проверка существования коллекции
+            if not self.milvus_manager.load_collection():
+                raise ValueError(
+                    f"Коллекция {config.milvus.collection_name} не найдена. "
+                    "Сначала создайте индекс с помощью команды 'index'."
+                )
+            
             vector_store = self.milvus_manager.get_vector_store()
             storage_context = StorageContext.from_defaults(
                 vector_store=vector_store
@@ -233,7 +246,7 @@ class GOSTRAGSystem:
                 storage_context=storage_context
             )
             
-            logger.info("Индекс загружен из Milvus")
+            logger.info("Индекс загружен из Milvus Lite")
             
         except Exception as e:
             logger.error(f"Ошибка загрузки индекса: {e}")
@@ -256,6 +269,8 @@ class GOSTRAGSystem:
                 raise ValueError("Индекс не создан. Вызовите create_index() или load_index()")
             
             top_k = top_k or config.rag.top_k
+            
+            logger.info(f"Настройка query engine с top_k={top_k}")
             
             # Создание retriever
             retriever = VectorIndexRetriever(
@@ -302,6 +317,8 @@ class GOSTRAGSystem:
             if self.query_engine is None:
                 raise ValueError("Query engine не настроен. Вызовите setup_query_engine()")
             
+            logger.info(f"Выполнение запроса: {question[:100]}...")
+            
             response = self.query_engine.query(question)
             
             result = {
@@ -315,6 +332,8 @@ class GOSTRAGSystem:
                     for node in response.source_nodes
                 ]
             }
+            
+            logger.info(f"Запрос выполнен, найдено {len(result['source_nodes'])} источников")
             
             return result
             
@@ -346,6 +365,8 @@ class GOSTRAGSystem:
         Представь информацию в структурированном виде с указанием конкретных значений и диапазонов.
         """
         
+        logger.info(f"Извлечение информации о классе прочности: {class_name}")
+        
         return self.query(prompt)
     
     def get_stats(self) -> Dict:
@@ -354,10 +375,15 @@ class GOSTRAGSystem:
             "milvus": self.milvus_manager.get_collection_stats() if self.milvus_manager else {},
             "config": {
                 "model": config.openrouter.model,
-                "embedding_model": config.embedding.model,
+                "embedding_type": config.embedding.embedding_type,
+                "embedding_model": config.embedding.local_model if config.embedding.embedding_type == "local" else config.embedding.model,
                 "chunk_size": config.rag.chunk_size,
                 "chunk_overlap": config.rag.chunk_overlap,
-                "top_k": config.rag.top_k
+                "top_k": config.rag.top_k,
+                "milvus_uri": config.milvus.uri
             }
         }
+        
+        logger.info("Статистика системы получена")
+        
         return stats

@@ -23,8 +23,9 @@ sentence-transformers==2.2.2
 torch==2.1.2
 transformers==4.36.2
 
-# Vector Database
-pymilvus==2.3.7
+# Vector Database (Milvus Lite)
+pymilvus==2.6.2
+milvus-lite==2.3.5
 
 # OpenRouter API (OpenAI compatible)
 openai==1.35.3

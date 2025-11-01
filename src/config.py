@@ -1,5 +1,6 @@
 """
 Конфигурация для RAG системы
+Обновлено для поддержки Milvus Lite
 """
 
 import os
@@ -54,10 +55,22 @@ class EmbeddingConfig(BaseModel):
 
 
 class MilvusConfig(BaseModel):
-    """Конфигурация Milvus"""
-    host: str = Field(default_factory=lambda: os.getenv("MILVUS_HOST", "localhost"))
-    port: int = Field(default_factory=lambda: _safe_int("MILVUS_PORT", 19530))
+    """
+    Конфигурация Milvus Lite
+    
+    Обновлено для использования uri вместо host/port
+    """
+    # Новый параметр для Milvus Lite
+    uri: str = Field(default_factory=lambda: os.getenv("MILVUS_URI", "./milvus_lite.db"))
+    
+    # Старые параметры для обратной совместимости (deprecated)
+    host: Optional[str] = Field(default_factory=lambda: os.getenv("MILVUS_HOST", None))
+    port: Optional[int] = Field(default_factory=lambda: _safe_int("MILVUS_PORT", 0) if os.getenv("MILVUS_PORT") else None)
+    
+    # Общие параметры
     collection_name: str = Field(default_factory=lambda: os.getenv("MILVUS_COLLECTION_NAME", "gost_documents"))
+    dimension: int = Field(default_factory=lambda: _safe_int("MILVUS_DIMENSION", 1024))
+    metric_type: str = Field(default_factory=lambda: os.getenv("MILVUS_METRIC_TYPE", "COSINE"))
 
 
 class RAGConfig(BaseModel):
@@ -94,15 +107,33 @@ class Config(BaseModel):
         """
         logger = logging.getLogger(__name__)
         
+        # Проверка OpenRouter API ключа
         if not self.openrouter.api_key:
             logger.error("Ошибка конфигурации: OPENROUTER_API_KEY не установлен")
             raise ValueError("OPENROUTER_API_KEY не установлен")
         
-        if not self.embedding.api_key:
-            logger.error("Ошибка конфигурации: EMBEDDING_API_KEY не установлен")
-            raise ValueError("EMBEDDING_API_KEY не установлен")
+        # Проверка embedding API ключа только для типа 'openai'
+        if self.embedding.embedding_type.lower() == "openai" and not self.embedding.api_key:
+            logger.error("Ошибка конфигурации: EMBEDDING_API_KEY не установлен для типа 'openai'")
+            raise ValueError("EMBEDDING_API_KEY не установлен для типа 'openai'")
+        
+        # Проверка Milvus конфигурации
+        if not self.milvus.uri:
+            logger.error("Ошибка конфигурации: MILVUS_URI не установлен")
+            raise ValueError("MILVUS_URI не установлен")
+        
+        # Предупреждение о deprecated параметрах
+        if self.milvus.host or self.milvus.port:
+            logger.warning(
+                "ВНИМАНИЕ: Параметры MILVUS_HOST и MILVUS_PORT устарели. "
+                "Используйте MILVUS_URI для Milvus Lite"
+            )
         
         logger.info("Конфигурация успешно валидирована")
+        logger.info(f"Milvus URI: {self.milvus.uri}")
+        logger.info(f"Embedding type: {self.embedding.embedding_type}")
+        logger.info(f"LLM model: {self.openrouter.model}")
+        
         return True
 
 

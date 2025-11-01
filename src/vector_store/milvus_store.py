@@ -1,17 +1,11 @@
 """
-Модуль для работы с Milvus векторной базой данных
+Модуль для работы с Milvus Lite векторной базой данных
+Обновлено для использования Milvus Lite вместо Milvus Standalone
 """
 
 import logging
 from typing import List, Dict, Optional
-from pymilvus import (
-    connections,
-    Collection,
-    CollectionSchema,
-    FieldSchema,
-    DataType,
-    utility
-)
+from pymilvus import MilvusClient
 from llama_index.vector_stores.milvus import MilvusVectorStore
 from llama_index.core import VectorStoreIndex, StorageContext
 
@@ -19,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class MilvusManager:
-    """Менеджер для работы с Milvus"""
+    """Менеджер для работы с Milvus Lite"""
     
     def __enter__(self):
         """Context manager entry"""
@@ -33,48 +27,44 @@ class MilvusManager:
     
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 19530,
+        uri: str = "./milvus_lite.db",
         collection_name: str = "gost_documents",
-        dim: int = 1536  # Размерность для text-embedding-3-small
+        dim: int = 1024,  # Размерность для intfloat/multilingual-e5-large
+        metric_type: str = "COSINE"
     ):
         """
-        Инициализация менеджера Milvus
+        Инициализация менеджера Milvus Lite
         
         Args:
-            host: Хост Milvus
-            port: Порт Milvus
+            uri: Путь к файлу базы данных Milvus Lite
             collection_name: Имя коллекции
             dim: Размерность векторов
+            metric_type: Тип метрики (COSINE, L2, IP)
         """
-        self.host = host
-        self.port = port
+        self.uri = uri
         self.collection_name = collection_name
         self.dim = dim
-        self.collection: Optional[Collection] = None
+        self.metric_type = metric_type
+        self.client: Optional[MilvusClient] = None
         
     def connect(self) -> bool:
         """
-        Подключение к Milvus
+        Подключение к Milvus Lite
         
         Returns:
             True если подключение успешно
         """
         try:
-            connections.connect(
-                alias="default",
-                host=self.host,
-                port=self.port
-            )
-            logger.info(f"Подключено к Milvus: {self.host}:{self.port}")
+            self.client = MilvusClient(uri=self.uri)
+            logger.info(f"Подключено к Milvus Lite: {self.uri}")
             return True
         except Exception as e:
-            logger.error(f"Ошибка подключения к Milvus: {e}")
+            logger.error(f"Ошибка подключения к Milvus Lite: {e}")
             return False
     
     def create_collection(self, overwrite: bool = False) -> bool:
         """
-        Создание коллекции в Milvus
+        Создание коллекции в Milvus Lite
         
         Args:
             overwrite: Перезаписать существующую коллекцию
@@ -83,48 +73,32 @@ class MilvusManager:
             True если коллекция создана успешно
         """
         try:
+            if self.client is None:
+                logger.error("Клиент не подключен. Вызовите connect() сначала")
+                return False
+            
             # Проверка существования коллекции
-            if utility.has_collection(self.collection_name):
+            collections = self.client.list_collections()
+            collection_exists = self.collection_name in collections
+            
+            if collection_exists:
                 if overwrite:
-                    utility.drop_collection(self.collection_name)
+                    self.client.drop_collection(collection_name=self.collection_name)
                     logger.info(f"Коллекция {self.collection_name} удалена")
                 else:
                     logger.info(f"Коллекция {self.collection_name} уже существует")
-                    self.collection = Collection(self.collection_name)
                     return True
             
-            # Определение схемы коллекции
-            fields = [
-                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=self.dim),
-                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="metadata", dtype=DataType.VARCHAR, max_length=65535)
-            ]
-            
-            schema = CollectionSchema(
-                fields=fields,
-                description="GOST documents collection"
-            )
-            
-            # Создание коллекции
-            self.collection = Collection(
-                name=self.collection_name,
-                schema=schema
-            )
-            
-            # Создание индекса для векторного поиска
-            index_params = {
-                "metric_type": "L2",
-                "index_type": "IVF_FLAT",
-                "params": {"nlist": 1024}
-            }
-            
-            self.collection.create_index(
-                field_name="embedding",
-                index_params=index_params
+            # Создание коллекции с автоматической схемой
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                dimension=self.dim,
+                metric_type=self.metric_type,
+                auto_id=True
             )
             
             logger.info(f"Коллекция {self.collection_name} создана успешно")
+            logger.info(f"Параметры: dimension={self.dim}, metric_type={self.metric_type}")
             return True
             
         except Exception as e:
@@ -138,36 +112,47 @@ class MilvusManager:
         Returns:
             MilvusVectorStore объект
         """
-        vector_store = MilvusVectorStore(
-            host=self.host,
-            port=self.port,
-            collection_name=self.collection_name,
-            dim=self.dim
-        )
-        return vector_store
+        try:
+            # LlamaIndex MilvusVectorStore поддерживает Milvus Lite через uri параметр
+            vector_store = MilvusVectorStore(
+                uri=self.uri,
+                collection_name=self.collection_name,
+                dim=self.dim,
+                overwrite=False
+            )
+            logger.info(f"Векторное хранилище создано для коллекции {self.collection_name}")
+            return vector_store
+        except Exception as e:
+            logger.error(f"Ошибка создания векторного хранилища: {e}")
+            raise
     
     def load_collection(self) -> bool:
         """
         Загрузка коллекции в память
         
+        Note:
+            В Milvus Lite коллекции автоматически доступны,
+            явная загрузка не требуется
+        
         Returns:
-            True если загрузка успешна
+            True если коллекция доступна
         """
         try:
-            # Проверка подключения
-            if not self._is_connected():
-                logger.warning("Нет подключения к Milvus, попытка переподключения")
+            if self.client is None:
+                logger.warning("Клиент не подключен, попытка переподключения")
                 if not self.connect():
                     return False
             
-            if self.collection is None:
-                self.collection = Collection(self.collection_name)
-            
-            self.collection.load()
-            logger.info(f"Коллекция {self.collection_name} загружена в память")
-            return True
+            collections = self.client.list_collections()
+            if self.collection_name in collections:
+                logger.info(f"Коллекция {self.collection_name} доступна")
+                return True
+            else:
+                logger.warning(f"Коллекция {self.collection_name} не найдена")
+                return False
+                
         except Exception as e:
-            logger.error(f"Ошибка загрузки коллекции: {e}")
+            logger.error(f"Ошибка проверки коллекции: {e}")
             return False
     
     def get_collection_stats(self) -> Dict:
@@ -178,47 +163,155 @@ class MilvusManager:
             Словарь со статистикой
         """
         try:
-            # Проверка подключения
-            if not self._is_connected():
-                logger.warning("Нет подключения к Milvus, попытка переподключения")
+            if self.client is None:
+                logger.warning("Клиент не подключен, попытка переподключения")
                 if not self.connect():
-                    return {}
+                    return {"error": "Не удалось подключиться к Milvus Lite"}
             
-            if self.collection is None:
-                self.collection = Collection(self.collection_name)
+            # Проверка существования коллекции
+            collections = self.client.list_collections()
+            if self.collection_name not in collections:
+                logger.warning(f"Коллекция {self.collection_name} не найдена")
+                return {
+                    "name": self.collection_name,
+                    "exists": False,
+                    "num_entities": 0
+                }
             
-            stats = {
+            # Безопасное получение статистики
+            try:
+                stats = self.client.get_collection_stats(collection_name=self.collection_name)
+                row_count = stats.get("row_count", 0)
+            except Exception as e:
+                logger.warning(f"Не удалось получить статистику: {e}")
+                row_count = 0
+            
+            result = {
                 "name": self.collection_name,
-                "num_entities": self.collection.num_entities,
-                "description": self.collection.description
+                "exists": True,
+                "num_entities": row_count,
+                "dimension": self.dim,
+                "metric_type": self.metric_type
             }
-            return stats
+            
+            logger.info(f"Статистика коллекции {self.collection_name}: {result}")
+            return result
+            
         except Exception as e:
             logger.error(f"Ошибка получения статистики: {e}")
-            return {}
+            return {
+                "name": self.collection_name,
+                "error": str(e)
+            }
+    
+    def insert_data(self, data: List[Dict]) -> bool:
+        """
+        Вставка данных в коллекцию
+        
+        Args:
+            data: Список словарей с данными для вставки
+                  Каждый словарь должен содержать ключи: vector, text, metadata
+        
+        Returns:
+            True если вставка успешна
+        """
+        try:
+            if self.client is None:
+                logger.error("Клиент не подключен")
+                return False
+            
+            if not data:
+                logger.warning("Нет данных для вставки")
+                return False
+            
+            # Валидация размерности векторов
+            for i, item in enumerate(data):
+                if "vector" in item:
+                    vector_dim = len(item["vector"])
+                    if vector_dim != self.dim:
+                        logger.error(
+                            f"Неверная размерность вектора в записи {i}: "
+                            f"ожидается {self.dim}, получено {vector_dim}"
+                        )
+                        return False
+            
+            # Вставка данных
+            self.client.insert(
+                collection_name=self.collection_name,
+                data=data
+            )
+            
+            logger.info(f"Вставлено {len(data)} записей в коллекцию {self.collection_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка вставки данных: {e}")
+            return False
+    
+    def search(
+        self,
+        query_vector: List[float],
+        limit: int = 5,
+        output_fields: Optional[List[str]] = None
+    ) -> List[Dict]:
+        """
+        Поиск похожих векторов
+        
+        Args:
+            query_vector: Вектор запроса
+            limit: Количество результатов
+            output_fields: Поля для возврата
+        
+        Returns:
+            Список найденных результатов
+        """
+        try:
+            if self.client is None:
+                logger.error("Клиент не подключен")
+                return []
+            
+            # Поиск
+            results = self.client.search(
+                collection_name=self.collection_name,
+                data=[query_vector],
+                limit=limit,
+                output_fields=output_fields or ["text", "metadata"]
+            )
+            
+            logger.info(f"Найдено {len(results[0]) if results else 0} результатов")
+            return results[0] if results else []
+            
+        except Exception as e:
+            logger.error(f"Ошибка поиска: {e}")
+            return []
     
     def _is_connected(self) -> bool:
         """
-        Проверка подключения к Milvus
+        Проверка подключения к Milvus Lite
         
         Returns:
             True если подключение активно
         """
         try:
-            return connections.has_connection("default")
+            if self.client is None:
+                return False
+            # Проверка через получение списка коллекций
+            self.client.list_collections()
+            return True
         except Exception:
             return False
     
     def disconnect(self) -> None:
         """
-        Отключение от Milvus
+        Отключение от Milvus Lite
         
-        Returns:
-            None
+        Note:
+            В Milvus Lite явное отключение не требуется,
+            клиент автоматически управляет соединением
         """
         try:
-            if self._is_connected():
-                connections.disconnect(alias="default")
-                logger.info("Отключено от Milvus")
+            if self.client is not None:
+                self.client = None
+                logger.info("Отключено от Milvus Lite")
         except Exception as e:
-            logger.error(f"Ошибка отключения от Milvus: {e}")
+            logger.error(f"Ошибка отключения от Milvus Lite: {e}")
